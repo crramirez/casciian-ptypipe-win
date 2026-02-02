@@ -39,6 +39,10 @@ void StdinWriterThread(HANDLE hWritePipe, HANDLE hInput) {
 }
 
 int main(int argc, char* argv[]) {
+    // Set console input and output code pages to UTF-8
+    SetConsoleCP(CP_UTF8);
+    SetConsoleOutputCP(CP_UTF8);
+
     // Check if command line arguments are provided
     if (argc < 2) {
         std::wcerr << L"Usage: ptypipe.exe <command> [args...]" << std::endl;
@@ -52,15 +56,15 @@ int main(int argc, char* argv[]) {
     for (int i = 1; i < argc; i++) {
         if (i > 1) cmdLine += L" ";
         
-        // Convert argument from narrow to wide string
+        // Convert argument from narrow to wide string using UTF-8
         std::string narrowArg = argv[i];
-        int wideSize = MultiByteToWideChar(CP_ACP, 0, narrowArg.c_str(), -1, NULL, 0);
+        int wideSize = MultiByteToWideChar(CP_UTF8, 0, narrowArg.c_str(), -1, NULL, 0);
         if (wideSize == 0) {
             std::wcerr << L"Failed to convert argument to wide string" << std::endl;
             return 1;
         }
         std::vector<wchar_t> wideArg(wideSize);
-        MultiByteToWideChar(CP_ACP, 0, narrowArg.c_str(), -1, wideArg.data(), wideSize);
+        MultiByteToWideChar(CP_UTF8, 0, narrowArg.c_str(), -1, wideArg.data(), wideSize);
         std::wstring arg(wideArg.data());
         
         // Check if argument needs quoting (contains space, tab, or quote)
@@ -161,14 +165,48 @@ int main(int argc, char* argv[]) {
     std::vector<wchar_t> cmdLineBuffer(cmdLine.begin(), cmdLine.end());
     cmdLineBuffer.push_back(L'\0');
 
+    // Build a Unicode environment block for UTF-8 support in child processes
+    // Get current environment and append UTF-8 related variables
+    std::wstring envBlock;
+    wchar_t* currentEnv = GetEnvironmentStringsW();
+    if (currentEnv) {
+        // Copy existing environment variables
+        wchar_t* p = currentEnv;
+        while (*p) {
+            size_t len = wcslen(p);
+            envBlock.append(p, len + 1);  // Include null terminator
+            p += len + 1;
+        }
+        FreeEnvironmentStringsW(currentEnv);
+    }
+
+    // Add environment variables to encourage UTF-8 output in child processes
+    // PYTHONIOENCODING for Python scripts
+    envBlock += L"PYTHONIOENCODING=utf-8";
+    envBlock += L'\0';
+    // PYTHONUTF8 for Python 3.7+
+    envBlock += L"PYTHONUTF8=1";
+    envBlock += L'\0';
+    // LANG for Unix-like programs and some cross-platform tools
+    envBlock += L"LANG=en_US.UTF-8";
+    envBlock += L'\0';
+    // LC_ALL for locale settings
+    envBlock += L"LC_ALL=en_US.UTF-8";
+    envBlock += L'\0';
+    // OutputEncoding for PowerShell when running scripts
+    envBlock += L"PSDefaultParameterValues=@{\"Out-File:Encoding\"=\"utf8\"}";
+    envBlock += L'\0';
+    // Add final null terminator for the environment block
+    envBlock += L'\0';
+
     if (!CreateProcessW(
         NULL,                       // Application name
         cmdLineBuffer.data(),       // Command line (mutable wide string buffer)
         NULL,                       // Process security attributes
         NULL,                       // Thread security attributes
         TRUE,                       // Inherit handles
-        CREATE_NO_WINDOW,           // Creation flags - no window
-        NULL,                       // Environment
+        CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,  // Creation flags - no window, Unicode environment
+        (LPVOID)envBlock.c_str(),   // Environment with UTF-8 settings
         NULL,                       // Current directory
         &si,                        // Startup info
         &pi                         // Process information
