@@ -26,7 +26,18 @@ Pseudo terminal for Windows
 3. Build the solution (Ctrl+Shift+B or Build → Build Solution)
 4. The executable will be in `x64\Release\ptypipe.exe` or `x64\Debug\ptypipe.exe`
 
-Alternatively, build from the command line using MSBuild:
+Alternatively, build from the command line using the provided batch script:
+```
+build.bat [Configuration] [Platform]
+```
+
+Examples:
+```
+build.bat Release x64
+build.bat Debug x86
+```
+
+Or use MSBuild directly:
 ```
 msbuild ptypipe.sln /p:Configuration=Release /p:Platform=x64
 ```
