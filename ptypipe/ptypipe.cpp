@@ -181,21 +181,32 @@ int main(int argc, char* argv[]) {
     }
 
     // Add environment variables to encourage UTF-8 output in child processes
+    // Only add if the variable is not already set in the environment
     // PYTHONIOENCODING for Python scripts
-    envBlock += L"PYTHONIOENCODING=utf-8";
-    envBlock += L'\0';
+    if (GetEnvironmentVariableW(L"PYTHONIOENCODING", NULL, 0) == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
+        envBlock += L"PYTHONIOENCODING=utf-8";
+        envBlock += L'\0';
+    }
     // PYTHONUTF8 for Python 3.7+
-    envBlock += L"PYTHONUTF8=1";
-    envBlock += L'\0';
+    if (GetEnvironmentVariableW(L"PYTHONUTF8", NULL, 0) == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
+        envBlock += L"PYTHONUTF8=1";
+        envBlock += L'\0';
+    }
     // LANG for Unix-like programs and some cross-platform tools
-    envBlock += L"LANG=en_US.UTF-8";
-    envBlock += L'\0';
+    if (GetEnvironmentVariableW(L"LANG", NULL, 0) == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
+        envBlock += L"LANG=en_US.UTF-8";
+        envBlock += L'\0';
+    }
     // LC_ALL for locale settings
-    envBlock += L"LC_ALL=en_US.UTF-8";
-    envBlock += L'\0';
+    if (GetEnvironmentVariableW(L"LC_ALL", NULL, 0) == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
+        envBlock += L"LC_ALL=en_US.UTF-8";
+        envBlock += L'\0';
+    }
     // OutputEncoding for PowerShell when running scripts
-    envBlock += L"PSDefaultParameterValues=@{\"Out-File:Encoding\"=\"utf8\"}";
-    envBlock += L'\0';
+    if (GetEnvironmentVariableW(L"PSDefaultParameterValues", NULL, 0) == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
+        envBlock += L"PSDefaultParameterValues=@{\"Out-File:Encoding\"=\"utf8\"}";
+        envBlock += L'\0';
+    }
     // Add final null terminator for the environment block
     envBlock += L'\0';
 
