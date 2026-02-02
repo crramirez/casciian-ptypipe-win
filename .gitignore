@@ -54,3 +54,6 @@ Release/
 *.sln.ide/
 *.VC.db
 *.VC.VC.opendb
+
+# CodeQL
+_codeql_detected_source_root
