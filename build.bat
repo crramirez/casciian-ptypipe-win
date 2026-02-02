@@ -1,6 +1,6 @@
 @echo off
 REM Build script for ptypipe.exe
-REM Requires Visual Studio 2022 or later with C++ tools installed
+REM Requires Visual Studio 2026 or later with C++ tools installed
 
 echo Building ptypipe.exe...
 echo.
@@ -8,21 +8,33 @@ echo.
 REM Try to find MSBuild
 set MSBUILD_PATH=
 
-REM Check for Visual Studio 2022
-if exist "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" (
-    set MSBUILD_PATH=C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe
+REM First, try vswhere (installed with recent Visual Studio / Build Tools)
+if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" (
+    for /f "usebackq delims=" %%i in (`
+        "%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe
+    `) do (
+        if not defined MSBUILD_PATH set "MSBUILD_PATH=%%i"
+    )
+) else if exist "%ProgramFiles%\Microsoft Visual Studio\Installer\vswhere.exe" (
+    for /f "usebackq delims=" %%i in (`
+        "%ProgramFiles%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe
+    `) do (
+        if not defined MSBUILD_PATH set "MSBUILD_PATH=%%i"
+    )
 )
-if exist "C:\Program Files\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe" (
-    set MSBUILD_PATH=C:\Program Files\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe
-)
-if exist "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" (
-    set MSBUILD_PATH=C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe
+
+REM If vswhere did not find MSBuild, try msbuild from PATH (e.g. Developer Command Prompt)
+if "%MSBUILD_PATH%"=="" (
+    where msbuild >nul 2>&1
+    if %ERRORLEVEL%==0 (
+        set "MSBUILD_PATH=msbuild"
+    )
 )
 
 if "%MSBUILD_PATH%"=="" (
     echo ERROR: MSBuild.exe not found!
-    echo Please ensure Visual Studio 2022 is installed with C++ development tools.
-    echo Or use Visual Studio Developer Command Prompt to build.
+    echo Please ensure Visual Studio or Build Tools are installed with C++ development tools.
+    echo Or run this script from a Visual Studio Developer Command Prompt.
     exit /b 1
 )
 

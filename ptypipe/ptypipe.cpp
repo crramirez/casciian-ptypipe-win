@@ -14,8 +14,9 @@ void PipeReaderThread(HANDLE hReadPipe, HANDLE hOutput) {
         if (!ReadFile(hReadPipe, buffer, BUFFER_SIZE, &bytesRead, NULL) || bytesRead == 0) {
             break;
         }
-        WriteFile(hOutput, buffer, bytesRead, &bytesWritten, NULL);
-        FlushFileBuffers(hOutput);
+        if (!WriteFile(hOutput, buffer, bytesRead, &bytesWritten, NULL) || bytesWritten != bytesRead) {
+            break;
+        }
     }
 }
 
@@ -40,38 +41,65 @@ void StdinWriterThread(HANDLE hWritePipe, HANDLE hInput) {
 int main(int argc, char* argv[]) {
     // Check if command line arguments are provided
     if (argc < 2) {
-        std::cerr << "Usage: ptypipe.exe <command> [args...]" << std::endl;
-        std::cerr << "Example: ptypipe.exe cmd.exe" << std::endl;
-        std::cerr << "Example: ptypipe.exe powershell.exe" << std::endl;
+        std::wcerr << L"Usage: ptypipe.exe <command> [args...]" << std::endl;
+        std::wcerr << L"Example: ptypipe.exe cmd.exe" << std::endl;
+        std::wcerr << L"Example: ptypipe.exe powershell.exe" << std::endl;
         return 1;
     }
 
-    // Build the command line from arguments
-    std::string cmdLine;
+    // Build the command line from arguments using proper Windows escaping
+    std::wstring cmdLine;
     for (int i = 1; i < argc; i++) {
-        if (i > 1) cmdLine += " ";
+        if (i > 1) cmdLine += L" ";
         
-        std::string arg = argv[i];
-        bool needsQuotes = arg.find(' ') != std::string::npos || arg.find('\t') != std::string::npos;
+        // Convert argument from narrow to wide string
+        std::string narrowArg = argv[i];
+        int wideSize = MultiByteToWideChar(CP_ACP, 0, narrowArg.c_str(), -1, NULL, 0);
+        if (wideSize == 0) {
+            std::wcerr << L"Failed to convert argument to wide string" << std::endl;
+            return 1;
+        }
+        std::vector<wchar_t> wideArg(wideSize);
+        MultiByteToWideChar(CP_ACP, 0, narrowArg.c_str(), -1, wideArg.data(), wideSize);
+        std::wstring arg(wideArg.data());
+        
+        // Check if argument needs quoting (contains space, tab, or quote)
+        bool needsQuotes = arg.find(L' ') != std::wstring::npos || 
+                          arg.find(L'\t') != std::wstring::npos ||
+                          arg.find(L'"') != std::wstring::npos;
         
         if (needsQuotes) {
-            cmdLine += "\"";
+            cmdLine += L'"';
         }
         
-        // Escape existing quotes in the argument
-        for (char c : arg) {
-            if (c == '"') {
-                cmdLine += "\\\"";
-            } else if (c == '\\') {
-                // Check if we need to escape backslash (when followed by quote or at end before quote)
-                cmdLine += "\\\\";
+        // Escape the argument per Windows rules:
+        // Backslashes are literal except when followed by a quote or at the end before closing quote
+        for (size_t j = 0; j < arg.length(); j++) {
+            size_t numBackslashes = 0;
+            
+            // Count consecutive backslashes
+            while (j < arg.length() && arg[j] == L'\\') {
+                numBackslashes++;
+                j++;
+            }
+            
+            if (j == arg.length()) {
+                // Backslashes at end of arg: double them if we're quoting
+                cmdLine.append(needsQuotes ? numBackslashes * 2 : numBackslashes, L'\\');
+                break;
+            } else if (arg[j] == L'"') {
+                // Backslashes before quote: double them and escape the quote
+                cmdLine.append(numBackslashes * 2, L'\\');
+                cmdLine += L"\\\"";
             } else {
-                cmdLine += c;
+                // Normal backslashes: keep as-is
+                cmdLine.append(numBackslashes, L'\\');
+                cmdLine += arg[j];
             }
         }
         
         if (needsQuotes) {
-            cmdLine += "\"";
+            cmdLine += L'"';
         }
     }
 
@@ -87,7 +115,7 @@ int main(int argc, char* argv[]) {
 
     // Create stdin pipe
     if (!CreatePipe(&hStdInRead, &hStdInWrite, &sa, 0)) {
-        std::cerr << "Failed to create stdin pipe" << std::endl;
+        std::wcerr << L"Failed to create stdin pipe" << std::endl;
         return 1;
     }
     // Ensure the write handle to stdin is not inherited
@@ -95,7 +123,7 @@ int main(int argc, char* argv[]) {
 
     // Create stdout pipe
     if (!CreatePipe(&hStdOutRead, &hStdOutWrite, &sa, 0)) {
-        std::cerr << "Failed to create stdout pipe" << std::endl;
+        std::wcerr << L"Failed to create stdout pipe" << std::endl;
         CloseHandle(hStdInRead);
         CloseHandle(hStdInWrite);
         return 1;
@@ -105,7 +133,7 @@ int main(int argc, char* argv[]) {
 
     // Create stderr pipe
     if (!CreatePipe(&hStdErrRead, &hStdErrWrite, &sa, 0)) {
-        std::cerr << "Failed to create stderr pipe" << std::endl;
+        std::wcerr << L"Failed to create stderr pipe" << std::endl;
         CloseHandle(hStdInRead);
         CloseHandle(hStdInWrite);
         CloseHandle(hStdOutRead);
@@ -116,7 +144,7 @@ int main(int argc, char* argv[]) {
     SetHandleInformation(hStdErrRead, HANDLE_FLAG_INHERIT, 0);
 
     // Setup process startup information
-    STARTUPINFOA si;
+    STARTUPINFOW si;
     PROCESS_INFORMATION pi;
 
     ZeroMemory(&si, sizeof(si));
@@ -129,13 +157,13 @@ int main(int argc, char* argv[]) {
 
     ZeroMemory(&pi, sizeof(pi));
 
-    // Create the child process
-    std::vector<char> cmdLineBuffer(cmdLine.begin(), cmdLine.end());
-    cmdLineBuffer.push_back('\0');
+    // Create the child process using Unicode API
+    std::vector<wchar_t> cmdLineBuffer(cmdLine.begin(), cmdLine.end());
+    cmdLineBuffer.push_back(L'\0');
 
-    if (!CreateProcessA(
+    if (!CreateProcessW(
         NULL,                       // Application name
-        cmdLineBuffer.data(),       // Command line
+        cmdLineBuffer.data(),       // Command line (mutable wide string buffer)
         NULL,                       // Process security attributes
         NULL,                       // Thread security attributes
         TRUE,                       // Inherit handles
@@ -145,7 +173,7 @@ int main(int argc, char* argv[]) {
         &si,                        // Startup info
         &pi                         // Process information
     )) {
-        std::cerr << "Failed to create process. Error: " << GetLastError() << std::endl;
+        std::wcerr << L"Failed to create process. Error: " << GetLastError() << std::endl;
         CloseHandle(hStdInRead);
         CloseHandle(hStdInWrite);
         CloseHandle(hStdOutRead);
@@ -190,10 +218,9 @@ int main(int argc, char* argv[]) {
     stdoutThread.join();
     stderrThread.join();
     
-    // The stdin thread might be blocked on ReadFile from console input.
-    // We detach it to allow main to exit cleanly. The thread will be terminated
-    // by the OS when the process exits. The handle hStdInWrite will be cleaned up.
-    stdinThread.detach();
+    // Cancel any pending synchronous I/O on the stdin thread so it can exit cleanly
+    CancelSynchronousIo(stdinThread.native_handle());
+    stdinThread.join();
 
     return exitCode;
 }

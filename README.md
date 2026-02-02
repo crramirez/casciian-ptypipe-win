@@ -16,15 +16,15 @@ Pseudo terminal for Windows
 ## Building
 
 ### Requirements
-- Visual Studio 2022 or later (with C++ desktop development workload)
+- Visual Studio 2026 or later (with C++ desktop development workload)
 - Windows SDK 10.0 or later
 
 ### Build Instructions
 
 1. Open `ptypipe.sln` in Visual Studio
-2. Select your desired configuration (Debug/Release) and platform (x86/x64)
+2. Select your desired configuration (Debug/Release) and platform (x64/ARM64)
 3. Build the solution (Ctrl+Shift+B or Build → Build Solution)
-4. The executable will be in `x64\Release\ptypipe.exe` or `x64\Debug\ptypipe.exe`
+4. The executable will be in `x64\Release\ptypipe.exe`, `x64\Debug\ptypipe.exe`, `ARM64\Release\ptypipe.exe`, or `ARM64\Debug\ptypipe.exe`
 
 Alternatively, build from the command line using the provided batch script:
 ```
@@ -34,12 +34,13 @@ build.bat [Configuration] [Platform]
 Examples:
 ```
 build.bat Release x64
-build.bat Debug x86
+build.bat Debug ARM64
 ```
 
 Or use MSBuild directly:
 ```
 msbuild ptypipe.sln /p:Configuration=Release /p:Platform=x64
+msbuild ptypipe.sln /p:Configuration=Release /p:Platform=ARM64
 ```
 
 ## Usage
