@@ -51,12 +51,27 @@ int main(int argc, char* argv[]) {
     for (int i = 1; i < argc; i++) {
         if (i > 1) cmdLine += " ";
         
-        // Quote the argument if it contains spaces
         std::string arg = argv[i];
-        if (arg.find(' ') != std::string::npos) {
-            cmdLine += "\"" + arg + "\"";
-        } else {
-            cmdLine += arg;
+        bool needsQuotes = arg.find(' ') != std::string::npos || arg.find('\t') != std::string::npos;
+        
+        if (needsQuotes) {
+            cmdLine += "\"";
+        }
+        
+        // Escape existing quotes in the argument
+        for (char c : arg) {
+            if (c == '"') {
+                cmdLine += "\\\"";
+            } else if (c == '\\') {
+                // Check if we need to escape backslash (when followed by quote or at end before quote)
+                cmdLine += "\\\\";
+            } else {
+                cmdLine += c;
+            }
+        }
+        
+        if (needsQuotes) {
+            cmdLine += "\"";
         }
     }
 
@@ -171,11 +186,13 @@ int main(int argc, char* argv[]) {
     CloseHandle(hStdErrRead);
 
     // Wait for I/O threads to complete
-    // Note: stdin thread might be blocked on ReadFile, so we don't wait for it
+    // stdout and stderr threads will finish when child process closes its handles
     stdoutThread.join();
     stderrThread.join();
     
-    // Detach stdin thread as it might be blocked
+    // The stdin thread might be blocked on ReadFile from console input.
+    // We detach it to allow main to exit cleanly. The thread will be terminated
+    // by the OS when the process exits. The handle hStdInWrite will be cleaned up.
     stdinThread.detach();
 
     return exitCode;
