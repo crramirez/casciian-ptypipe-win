@@ -15,7 +15,7 @@ void PipeReaderThread(HANDLE hReadPipe, HANDLE hOutput) {
             break;
         }
         WriteFile(hOutput, buffer, bytesRead, &bytesWritten, NULL);
-        FlushFileHandle(hOutput);
+        FlushFileBuffers(hOutput);
     }
 }
 
